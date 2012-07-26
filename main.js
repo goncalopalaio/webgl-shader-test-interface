@@ -20,6 +20,8 @@
 /** Hold a reference to the WebGLContext */
 var gl = null;		   
 
+var programHandle;
+
 /** Hold a reference to the canvas DOM object. */
 var canvas = null;	 
 
@@ -53,6 +55,8 @@ var triangleColorBufferObject1;
 var triangleColorBufferObject2;
 var triangleColorBufferObject3;
 
+
+
 /** This will be used to pass in the transformation matrix. */
 var mvpMatrixHandle;
 
@@ -68,10 +72,14 @@ var positionDataSize = 3;
 /** Size of the color data in elements. */
 var colorDataSize = 4;	
 
+
+var counter=0;
+
 //Code editors:
 
 var veditor=null;
 var feditor=null;
+var errorBox=null;
 	
 // Helper function to load a shader
 function loadShader(sourceScriptId, type)
@@ -86,7 +94,9 @@ function loadShader(sourceScriptId, type)
 		
 		if (!shaderSource)
 		{
-			throw("Error: shader script '" + sourceScriptId + "' not found");
+			error="Error: shader script '" + sourceScriptId + "' not found";
+			pushToErrorBox(errorBox,error);
+			throw(error);
 		}
 		
 		// Pass in the shader source.
@@ -109,7 +119,9 @@ function loadShader(sourceScriptId, type)
 
 	if (shaderHandle == 0)
 	{
-		throw("Error creating shader " + sourceScriptId + ": " + error);
+		error="Error creating shader " + sourceScriptId + ": " + error;
+		pushToErrorBox(errorBox,error);
+		throw(error);
 	}
 	
 	return shaderHandle;
@@ -133,6 +145,7 @@ function linkProgram(vertexShader, fragmentShader)
 		gl.bindAttribLocation(programHandle, 0, "a_Position");
 		gl.bindAttribLocation(programHandle, 1, "a_Color");
 		
+
 		// Link the two shaders together into a program.
 		gl.linkProgram(programHandle);
 
@@ -149,7 +162,9 @@ function linkProgram(vertexShader, fragmentShader)
 	
 	if (programHandle == 0)
 	{
-		throw("Error creating program.");
+		error="Error creating program.";
+		pushToErrorBox(errorBox,error);
+		throw(error);
 	}
 	
 	return programHandle;
@@ -214,13 +229,14 @@ function startRendering()
 	var fragmentShaderHandle = loadShader("fragment_shader", gl.FRAGMENT_SHADER);			
 	
 	// Create a program object and store the handle to it.
-	var programHandle = linkProgram(vertexShaderHandle, fragmentShaderHandle);	
+	programHandle = linkProgram(vertexShaderHandle, fragmentShaderHandle);	
     
     // Set program handles. These will later be used to pass in values to the program.
 	mvpMatrixHandle = gl.getUniformLocation(programHandle, "u_MVPMatrix");        
     positionHandle = gl.getAttribLocation(programHandle, "a_Position");
     colorHandle = gl.getAttribLocation(programHandle, "a_Color");        
-    
+
+
     // Tell OpenGL to use this program when rendering.
     gl.useProgram(programHandle);
     
@@ -241,6 +257,9 @@ function startRendering()
     gl.bindBuffer(gl.ARRAY_BUFFER, triangleColorBufferObject3);
     gl.bufferData(gl.ARRAY_BUFFER, triangle3Colors, gl.STATIC_DRAW); 
 	
+
+		
+
 	// Tell the browser we want render() to be called whenever it's time to draw another frame.
 	window.requestAnimFrame(render, canvas);
 }
@@ -248,11 +267,21 @@ function startRendering()
 // Callback called each time the browser wants us to draw another frame
 function render(time)
 {           	
+
 	// Clear the canvas
 	gl.clear(gl.COLOR_BUFFER_BIT);
 	
 	// Do a complete rotation every 10 seconds.
     var time = Date.now() % 10000;
+    var d = new Date();
+	var n = d.getMilliseconds();
+
+    var timeUniformLocation = gl.getUniformLocation(programHandle, "a_Time");
+    gl.uniform1f(timeUniformLocation,n);
+
+
+
+
     var angleInDegrees = (360.0 / 10000.0) * time;
     var angleInRadians = angleInDegrees / 57.2957795;
     
@@ -294,7 +323,10 @@ function checkError()
 	
 	if (error)
 	{
-		throw("error: " + error);
+		error="error: " + error;
+		pushToErrorBox(errorBox,error);
+		throw(error);
+
 	}
 }
 
@@ -312,7 +344,10 @@ function drawTriangle(triangleColorBufferObject)
     gl.bindBuffer(gl.ARRAY_BUFFER, triangleColorBufferObject);
     gl.vertexAttribPointer(colorHandle, colorDataSize, gl.FLOAT, false,
     		0, 0);              
-    
+ 	
+
+
+
 	// This multiplies the view matrix by the model matrix, and stores the result in the modelview matrix
     // (which currently contains model * view).    
     mat4.multiply(viewMatrix, modelMatrix, mvpMatrix);
@@ -328,6 +363,8 @@ function drawTriangle(triangleColorBufferObject)
 function reload () {
 	log("Reloading!");
 
+	//Clean error box
+	cleanErrorBox(errorBox);
 	//Copy contents of the editor to the text Area
 	veditor.save();
 	feditor.save();
@@ -335,6 +372,12 @@ function reload () {
 	startRendering();
 }
 
+function pushToErrorBox(errorBox,message){
+	errorBox.value+=message+"\n";
+}
+function cleanErrorBox (errorBox) {
+	errorBox.value="";
+}
 
 // Main entry point
 function main()
@@ -358,6 +401,10 @@ function main()
     reloadLink=document.getElementById("reload");
     reloadLink.onclick=reload;
     
+    errorBox=document.getElementById("errorBox");
+
+
+
     document.addEventListener('keyup', shortcuts, false);//pass keyup events to function
 
 
