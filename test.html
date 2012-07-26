@@ -2,18 +2,25 @@
 <html>
 <head>
 	<title></title>
+
+	<link rel="stylesheet" href="css/codemirror/codemirror.css">
 	<style type="text/css" media="screen">
+
 		#canvas{
 			background-color: #DDD;
-			width:400px;
-			height:400px;
+			
+			float:left;
 		}
 		#editors{
 			float:right;
+			width:55%;
 		}
 		#reload{
 			float:left;
 			width:100%;
+		}
+		#vertex_shader,#fragment_shader{
+			width:49%;
 		}
 
 	</style>
@@ -62,7 +69,9 @@ void main()                    // The entry point for our fragment shader.
 
 
 </body>
-<script src="jslib/webgl-utils.js" type="text/javascript" charset="utf-8"></script>
-<script src="jslib/glMatrix.js" type="text/javascript" charset="utf-8"></script>
+<script src="jslib/webgl-utils.js" type="text/javascript" charset="utf-8" async defer></script>
+<script src="jslib/glMatrix.js" type="text/javascript" charset="utf-8" ></script>
 <script src="main.js" type="text/javascript" charset="utf-8" async defer></script>
+<script src="jslib/codemirror/codemirror.js" type="text/javascript" charset="utf-8" ></script>
+<script src="jslib/codemirror/clike.js" type="text/javascript" charset="utf-8" ></script>
 </html>

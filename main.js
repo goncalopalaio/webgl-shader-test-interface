@@ -68,6 +68,11 @@ var positionDataSize = 3;
 /** Size of the color data in elements. */
 var colorDataSize = 4;	
 
+//Code editors:
+
+var veditor=null;
+var feditor=null;
+	
 // Helper function to load a shader
 function loadShader(sourceScriptId, type)
 {
@@ -322,26 +327,46 @@ function drawTriangle(triangleColorBufferObject)
 
 function reload () {
 	log("Reloading!");
+
+	//Copy contents of the editor to the text Area
+	veditor.save();
+	feditor.save();
+	//Restart rendering process
 	startRendering();
 }
+
+
 // Main entry point
 function main()
 {		
-    // Try to get a WebGL context    
     canvas = document.getElementById("canvas");    
-    canvas.width=400;
+    
+    //Setup elements
+	veditor = CodeMirror.fromTextArea(document.getElementById("vertex_shader"), {
+        lineNumbers: true,
+        matchBrackets: true,
+        mode: "text/x-csrc"
+      });
+	 feditor = CodeMirror.fromTextArea(document.getElementById("fragment_shader"), {
+        lineNumbers: true,
+        matchBrackets: true,
+        mode: "text/x-csrc"
+     });
+	canvas.width=400;
     canvas.height=400;
 
     reloadLink=document.getElementById("reload");
     reloadLink.onclick=reload;
-
+    
     document.addEventListener('keyup', shortcuts, false);//pass keyup events to function
+
+
 
 
     
     // We don't need a depth buffer. 
     // See https://www.khronos.org/registry/webgl/specs/1.0/ Section 5.2 for more info on parameters and defaults.
-    gl = WebGLUtils.setupWebGL(canvas, { depth: false });
+    gl = WebGLUtils.setupWebGL(canvas, { depth: true });
             
     if (gl != null)
 	{    	
