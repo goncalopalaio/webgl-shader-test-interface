@@ -1,444 +1,559 @@
-/**
- * Lesson_one.js
- */
+//Reference to WebGLContext
+var gl=null; 
+var canvas=null;
+//Model Matrix. Used to move models from own object space to world space
+var modelMatrix=mat4.create();
+//View Matrix, Transforms world space to eye space (like a camera). Everything is positioned relative to our defined eye
+var viewMatrix=mat4.create();
+//Projection Matrix. Used to project the scene onto a 2D viewport
+var projectionMatrix=mat4.create();
+//Final combined matrix. Passed into the shader program
+var mvpMatrix=mat4.create();
 
-// We make use of the WebGL utility library, which was downloaded from here:
-// https://cvs.khronos.org/svn/repos/registry/trunk/public/webgl/sdk/demos/common/webgl-utils.js
-//
-// It defines two functions which we use here:
-//
-// // Creates a WebGL context.
-// WebGLUtils.setupWebGL(canvas);
-//
-// // Requests an animation callback. See: https://developer.mozilla.org/en/DOM/window.requestAnimationFrame
-// window.requestAnimFrame(callback, node);
-//
-// We also make use of the glMatrix file which can be downloaded from here:
-// http://code.google.com/p/glmatrix/source/browse/glMatrix.js
-//
+//LIGHTS
+//Copy of the Model Matrix to be used specifically for the light position
+var lightModelMatrix=mat4.create();
 
-/** Hold a reference to the WebGLContext */
-var gl = null;		   
+//MODELDATA
+//Float32Array buffers to store our model data
+var cubePositions;
+var cubeNormals;
+var cubeColors;
 
-var programHandle;
+//References to the vertex buffer objects (VBO) that we will create
+var cubePositionBufferObject;
+var cubeColorBufferObject;
+var cubeNormalBufferObject;
 
-/** Hold a reference to the canvas DOM object. */
-var canvas = null;	 
-
-/**
- * Store the model matrix. This matrix is used to move models from object space (where each model can be thought
- * of being located at the center of the universe) to world space.
- */
-var modelMatrix = mat4.create();
-
-/**
- * Store the view matrix. This can be thought of as our camera. This matrix transforms world space to eye space;
- * it positions things relative to our eye.
- */
-var viewMatrix = mat4.create();
-
-/** Store the projection matrix. This is used to project the scene onto a 2D viewport. */
-var projectionMatrix = mat4.create();
-
-/** Allocate storage for the final combined matrix. This will be passed into the shader program. */
-var mvpMatrix = mat4.create();
-
-/** Store our model data in a Float32Array buffer. */
-var trianglePositions;
-var triangle1Colors;
-var triangle2Colors;
-var triangle3Colors;
-
-/** Store references to the vertex buffer objects (VBOs) that will be created. */
-var trianglePositionBufferObject;
-var triangleColorBufferObject1;
-var triangleColorBufferObject2;
-var triangleColorBufferObject3;
-
-
-
-/** This will be used to pass in the transformation matrix. */
+//Used to pass in the combined transformation matrix
 var mvpMatrixHandle;
-
-/** This will be used to pass in model position information. */
+//Used to pass in the modelview matrix
+var mvMatrixHandle;
+//Used to pass in the light position
+var lightPosHandle;
+//Used to pass in the model position
 var positionHandle;
-
-/** This will be used to pass in model color information. */
+//Used to pass in the model color information
 var colorHandle;
+//Used to pass in the model normal information
+var normalHandle;
 
-/** Size of the position data in elements. */
-var positionDataSize = 3;
+/**********************************/
 
-/** Size of the color data in elements. */
-var colorDataSize = 4;	
+//Size of the position data in elements
+var positionDataSize=3;
+
+//Size of the color data in elements
+var colorDataSize	=4;
+
+//Size of the normal data in elements
+var normalDataSize	=3;
+
+/**********************************/
+
+//LIGHTS
+//Used to hold a light centered on the origin in model space,
+//fourth coordinate used so we can get translations to work when we multiply this by our transformation matrixes
+var lightPosInModelSpace = new Array (0,0,0,1);
+
+//Used to hold the current position of the light in world space (afther transformation via model matrix)
+var lightPosInWorldSpace=new Array(0,0,0,0);
+
+//Used to hold the transformed position of the light in eyespace (after the transformation via modelviw matrix)
+var lightPosInEyeSpace=new Array(0,0,0,0);
+
+//Handle to be used in our per-vertex cube shading program;
+var perVertexProgramHandle;
+
+//Handle to our light point program
+var pointProgramHandle;
 
 
-var counter=0;
 
-//Code editors:
+/*********************************************/
 
-var veditor=null;
-var feditor=null;
-var errorBox=null;
-	
-// Helper function to load a shader
-function loadShader(sourceScriptId, type)
-{
-	var shaderHandle = gl.createShader(type);
+/**Helper function to load a shader*/
+function loadShader (sourceScriptId,type) {
+	var shaderHandle=gl.createShader(type);
 	var error;
-	
-	if (shaderHandle != 0) 
-	{				
-		// Read the embedded shader from the document.
+
+	if (shaderHandle!=0) {
 		var shaderSource = document.getElementById(sourceScriptId);
-		
-		if (!shaderSource)
-		{
-			error="Error: shader script '" + sourceScriptId + "' not found";
+
+		if (!shaderSource) {
+			error="Error: shader script "+ sourceScriptId + " not found";
 			pushToErrorBox(error);
 			throw(error);
-		}
-		
-		// Pass in the shader source.
-		gl.shaderSource(shaderHandle, shaderSource.value);		
-		
-		// Compile the shader.
+		};
+
+		//Pass the shader source
+		gl.shaderSource(shaderHandle,shaderSource.value);
+
+		//Compile the shader
 		gl.compileShader(shaderHandle);
 
-		// Get the compilation status.		
-		var compiled = gl.getShaderParameter(shaderHandle, gl.COMPILE_STATUS);		
+		var compiled = gl.getShaderParameter(shaderHandle,gl.COMPILE_STATUS);
 
-		// If the compilation failed, delete the shader.
-		if (!compiled) 
-		{				
-			error = gl.getShaderInfoLog(shaderHandle);			
+		if (!compiled) {
+			error=gl.getShaderInfoLog(shaderHandle);
 			gl.deleteShader(shaderHandle);
-			shaderHandle = 0;
-		}
-	}
+			shaderHandle=0;
 
-	if (shaderHandle == 0)
-	{
-		error="Error creating shader " + sourceScriptId + ": " + error;
+		};
+
+	}
+	if(shaderHandle==0){
+		error="Error creating shader"+sourceScriptId + " : "+error;
 		pushToErrorBox(error);
 		throw(error);
-	}
-	
+	};
+
 	return shaderHandle;
 }
 
-// Helper function to link a program
-function linkProgram(vertexShader, fragmentShader)
-{
-	// Create a program object and store the handle to it.
-	var programHandle = gl.createProgram();
+/**Helper function to link a shader*/
+function linkProgram (vertexShader,fragmentShader,attributes) {
 	
-	if (programHandle != 0) 
-	{
-		// Bind the vertex shader to the program.
-		gl.attachShader(programHandle, vertexShader);			
+	//Create a program object and store the handle to it
+	var programHandle=gl.createProgram();
+	var error;
 
-		// Bind the fragment shader to the program.
-		gl.attachShader(programHandle, fragmentShader);
-		
-		// Bind attributes
-		gl.bindAttribLocation(programHandle, 0, "a_Position");
-		gl.bindAttribLocation(programHandle, 1, "a_Color");
-		
+	if(programHandle!=0){
+		//Bind the vertex shader to the program
+		gl.attachShader(programHandle,vertexShader);
+		//Bind the fragment shader to the program
+		gl.attachShader(programHandle,fragmentShader);
 
-		// Link the two shaders together into a program.
+		//Bind attributes
+		if (attributes) {
+			for (var i = 0; i < attributes.length; i++) {
+				gl.bindAttribLocation(programHandle,i,attributes[i]);
+			}
+		}
+
+		//Link the two shaders together into a program
 		gl.linkProgram(programHandle);
 
-		// Get the link status.
-		var linked = gl.getProgramParameter(programHandle, gl.LINK_STATUS);
+		//Get link status
+		var linked = gl.getProgramParameter(programHandle,gl.LINK_STATUS);
 
-		// If the link failed, delete the program.
-		if (!linked) 
-		{				
+		//If the link failed delete the program
+		if (!linked) {
+			error=gl.getProgramInfoLog(programHandle);
 			gl.deleteProgram(programHandle);
-			programHandle = 0;
+			programHandle=0;
 		}
 	}
-	
-	if (programHandle == 0)
-	{
-		error="Error creating program.";
+	if (programHandle==0) {
+		error="Error creating program"+ error;
 		pushToErrorBox(error);
 		throw(error);
 	}
-	
 	return programHandle;
 }
 
-// Called when we have the context
-function startRendering()
-{
-	/* Configure viewport */
-	
-	// Set the OpenGL viewport to the same size as the canvas.
-	gl.viewport(0, 0, canvas.clientWidth, canvas.clientHeight);
-	
-	// Create a new perspective projection matrix. The height will stay the same
-	// while the width will vary as per aspect ratio.
-	var ratio = canvas.clientWidth / canvas.clientHeight;
-	var left = -ratio;
-	var right = ratio;
-	var bottom = -1.0;
-	var top = 1.0;
-	var near = 1.0;
-	var far = 10.0;
-		
-	mat4.frustum(left, right, bottom, top, near, far, projectionMatrix);
-	
-	/* Configure general parameters */
-	
-	// Set the background clear color to gray.
-	gl.clearColor(0.5, 0.5, 0.5, 1.0);		
-	
-	/* Configure camera */
-	// Position the eye behind the origin.
-	var eyeX = 0.0;
-	var eyeY = 0.0;
-	var eyeZ = 1.7;
+/**Start rendering once we the contex*/
 
-	// We are looking toward the distance
-	var lookX = 0.0;
-	var lookY = 0.0;
-	var lookZ = -5.0;
+function startRendering(){
 
-	// Set our up vector. This is where our head would be pointing were we holding the camera.
-	var upX = 0.0;
-	var upY = 1.0;
-	var upZ = 0.0;
+	console.log(canvas);
+	//viewport as the same size of canvas
+	gl.viewport(0,0,canvas.clientWidth,canvas.clientHeight);
+
+	//create new perspective projection matrix. Fixed height but varying width according
+	//to aspect ratio
+	var ratio=canvas.clientWidth/canvas.clientHeight;
+	console.log("RATIO: "+ ratio);
+
+	var left= 	-ratio;
+	var right=	ratio;
+	var bottom=	-1.0;
+	var top=	1.0;
+	var near=	1.0;
+	var far=	10.0;
+
+	mat4.frustum(left,right,bottom,top,near,far,projectionMatrix);
+
+	//set background clear color
+	gl.clearColor(0.0,0.0,0.0,0.0);
 	
-	// Set the view matrix. This matrix can be said to represent the camera position.		
-	var eye = vec3.create();
-	eye[0] = eyeX; eye[1] = eyeY; eye[2] = eyeZ;
-	
-	var center = vec3.create();
-	center[0] = lookX; center[1] = lookY; center[2] = lookZ;
-	
-	var up = vec3.create();
-	up[0] = upX; up[1] = upY; up[2] = upZ;
-	
-	mat4.lookAt(eye, center, up, viewMatrix);
-	
-	/* Configure shaders */
-	
-	var vertexShaderHandle = loadShader("vertex_shader", gl.VERTEX_SHADER);
-	var fragmentShaderHandle = loadShader("fragment_shader", gl.FRAGMENT_SHADER);			
-	
-	// Create a program object and store the handle to it.
-	programHandle = linkProgram(vertexShaderHandle, fragmentShaderHandle);	
-    
-    // Set program handles. These will later be used to pass in values to the program.
-	mvpMatrixHandle = gl.getUniformLocation(programHandle, "u_MVPMatrix");        
-    positionHandle = gl.getAttribLocation(programHandle, "a_Position");
-    colorHandle = gl.getAttribLocation(programHandle, "a_Color");        
+	//remove backfaces
+	gl.enable(gl.CULL_FACE);
+
+	//enable depth testing
+	gl.enable(gl.DEPTH_TEST);
+
+	//Enable dithering
+	gl.enable(gl.DITHER);
+
+	//Configure camera
+	//Position the eye behind the origin
+	var eyeX=	0.0;
+	var eyeY=	0.0;
+	var eyeZ=	-0.5;
+
+	//Looking at:
+	var lookX=	0.0;
+	var lookY=	0.0;
+	var lookZ=	-5.0;
+
+	//set UP vector.
+
+	var upX=0.0;
+	var upY=1.0;
+	var upZ=0.0;
+
+	//set view matrix. This matrix represents the camera position
+	var eye=vec3.create();
+	eye[0]=eyeX;
+	eye[1]=eyeY;
+	eye[2]=eyeZ;
+
+	var center=vec3.create();
+	center[0]=lookX;
+	center[1]=lookY;
+	center[2]=lookZ;
+
+	var up=vec3.create();
+	up[0]=upX;
+	up[1]=upY;
+	up[2]=upZ;
+
+	mat4.lookAt(eye,center,up,viewMatrix);
+
+	//CONFIGURE SHADERS
+	var vertexShaderHandle=loadShader("vertex_shader",gl.VERTEX_SHADER);
+	var fragmentShaderHandle=loadShader("fragment_shader",gl.FRAGMENT_SHADER);
+
+	//create a program object and store the handle to it
+	perVertexProgramHandle=linkProgram(vertexShaderHandle,fragmentShaderHandle,new Array("a_Position","a_Color","a_Normal"));
+
+	//simple shader program for our point
+	var pointVertexShaderHandle=loadShader("point_vertex_shader",gl.VERTEX_SHADER);
+	var pointFragmentShaderHandle=loadShader("point_fragment_shader",gl.FRAGMENT_SHADER);
+
+	//create another program object
+	pointProgramHandle=linkProgram(pointVertexShaderHandle,pointFragmentShaderHandle,new Array("a_Position"));
+
+	//BUFFERS IN OPENGL WORKING MEMORY
+	cubePositionBufferObject=gl.createBuffer();
+	gl.bindBuffer(gl.ARRAY_BUFFER,cubePositionBufferObject);
+	gl.bufferData(gl.ARRAY_BUFFER,cubePositions,gl.STATIC_DRAW);
+
+	cubeColorBufferObject=gl.createBuffer();
+	gl.bindBuffer(gl.ARRAY_BUFFER,cubeColorBufferObject);
+	gl.bufferData(gl.ARRAY_BUFFER,cubeColors,gl.STATIC_DRAW);
+
+	cubeNormalBufferObject=gl.createBuffer();
+	gl.bindBuffer(gl.ARRAY_BUFFER,cubeNormalBufferObject);
+	gl.bufferData(gl.ARRAY_BUFFER,cubeNormals,gl.STATIC_DRAW);
+
+	//render frames
+
+	window.requestAnimFrame(render,canvas);
+
+}
+function render (time) {
+	//clear canvas
+	gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+	var time=Date.now() % 10000; //Complete rotation every 10 seconds
+	var angleInDegrees=(360.0/10000.0)*time;
+	var angleInRadians=angleInDegrees / 57.295;
+
+	gl.useProgram(perVertexProgramHandle);
+
+	//Set program handles for cube drawing
+	mvpMatrixHandle = gl.getUniformLocation(perVertexProgramHandle,"u_MVPMatrix");
+	mvMatrixHandle = gl.getUniformLocation(perVertexProgramHandle,"u_MVMatrix");
+	lightPosHandle=gl.getUniformLocation(perVertexProgramHandle,"u_LightPos");
 
 
-    // Tell OpenGL to use this program when rendering.
-    gl.useProgram(programHandle);
-    
-    // Create buffers in OpenGL's working memory.
-    trianglePositionBufferObject = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, trianglePositionBufferObject);
-    gl.bufferData(gl.ARRAY_BUFFER, trianglePositions, gl.STATIC_DRAW);
-    
-    triangleColorBufferObject1 = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, triangleColorBufferObject1);
-    gl.bufferData(gl.ARRAY_BUFFER, triangle1Colors, gl.STATIC_DRAW);
-    
-    triangleColorBufferObject2 = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, triangleColorBufferObject2);
-    gl.bufferData(gl.ARRAY_BUFFER, triangle2Colors, gl.STATIC_DRAW);
-    
-    triangleColorBufferObject3 = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, triangleColorBufferObject3);
-    gl.bufferData(gl.ARRAY_BUFFER, triangle3Colors, gl.STATIC_DRAW); 
+	positionHandle=gl.getAttribLocation(perVertexProgramHandle,"a_Position");
+	colorHandle=gl.getAttribLocation(perVertexProgramHandle,"a_Color");
+	normalHandle=gl.getAttribLocation(perVertexProgramHandle,"a_Normal");
+
+	var v=vec3.create();
+	//Calculate position of the light.Rotate and the push into the distance
+	mat4.identity(lightModelMatrix);
+	v[0]=0; v[1]=0; v[2]=-5;
+	mat4.translate(lightModelMatrix,v);
+	mat4.rotateY(lightModelMatrix,angleInRadians);
+	v[0]=0; v[1]=0; v[2]=2;
+	mat4.translate(lightModelMatrix,v);
+
+	mat4.multiplyVec4(lightModelMatrix,lightPosInModelSpace,lightPosInWorldSpace);
+	mat4.multiplyVec4(viewMatrix,lightPosInWorldSpace,lightPosInEyeSpace);
+
 	
+	//DRAW CUBES
+	mat4.identity(modelMatrix);
+	v[0]=4; v[1]=0; v[2]=-7;
+	mat4.translate(modelMatrix,v);
+	mat4.rotateX(modelMatrix,angleInRadians);
+	drawCube();
 
-		
+	mat4.identity(modelMatrix);
+	v[0]=-4; v[1]=0; v[2]=-7;
+	mat4.translate(modelMatrix,v);
+	mat4.rotateY(modelMatrix,angleInRadians);
+	drawCube();
 
-	// Tell the browser we want render() to be called whenever it's time to draw another frame.
-	window.requestAnimFrame(render, canvas);
+	mat4.identity(modelMatrix);
+	v[0]=0; v[1]=4; v[2]=-7;
+	mat4.translate(modelMatrix,v);
+	mat4.rotateZ(modelMatrix,angleInRadians);
+	drawCube();
+
+	mat4.identity(modelMatrix);
+	v[0]=4; v[1]=-4; v[2]=-7;
+	mat4.translate(modelMatrix,v);
+	drawCube();
+	
+	mat4.identity(modelMatrix);
+	v[0]=4; v[1]=0; v[2]=-5;
+	mat4.translate(modelMatrix,v);
+	v[0]=1;v[1]=1;v[2]=0;
+	mat4.rotate(modelMatrix,angleInRadians,v);
+	drawCube();
+
+	//Draw a point to indicate the light
+	gl.useProgram(pointProgramHandle);
+	drawLight();
+
+	gl.flush();//Flush commands to webgl
+	
+	window.requestAnimFrame(render,canvas);
 }
 
-// Callback called each time the browser wants us to draw another frame
-function render(time)
-{           	
-
-	// Clear the canvas
-	gl.clear(gl.COLOR_BUFFER_BIT);
-	
-	// Do a complete rotation every 10 seconds.
-    var time = Date.now() % 10000;
-    var d = new Date();
-	var n = d.getSeconds();
-
-    var timeUniformLocation = gl.getUniformLocation(programHandle, "a_Time");
-    gl.uniform1f(timeUniformLocation,n);
 
 
+function drawCube () {
+	gl.enableVertexAttribArray(positionHandle);
+	gl.bindBuffer(gl.ARRAY_BUFFER,cubePositionBufferObject);
+	gl.vertexAttribPointer(positionHandle,positionDataSize,gl.FLOAT,false,0,0);
 
+	gl.enableVertexAttribArray(colorHandle);
+	gl.bindBuffer(gl.ARRAY_BUFFER,cubeColorBufferObject);
+	gl.vertexAttribPointer(colorHandle,colorDataSize,gl.FLOAT,false,0,0);
 
-    var angleInDegrees = (360.0 / 10000.0) * time;
-    var angleInRadians = angleInDegrees / 57.2957795;
-    
-    var xyz = vec3.create();
-    
-    // Draw the triangle facing straight on.
-    mat4.identity(modelMatrix);
-    mat4.rotateZ(modelMatrix, angleInRadians);           
-    drawTriangle(triangleColorBufferObject1);
-    
-    // Draw one translated a bit down and rotated to be flat on the ground.
-    mat4.identity(modelMatrix);
-    xyz[0] = 0; xyz[1] = -1; xyz[2] = 0;
-    mat4.translate(modelMatrix, xyz);
-    mat4.rotateX(modelMatrix, 90 / 57.2957795);
-    xyz[0] = 0; xyz[1] = 0; xyz[2] = 1;
-    mat4.rotate(modelMatrix, angleInRadians, xyz);           
-    drawTriangle(triangleColorBufferObject2);
-    
-    // Draw one translated a bit to the right and rotated to be facing to the left.
-    mat4.identity(modelMatrix);
-    xyz[0] = 1; xyz[1] = 0; xyz[2] = 0;
-    mat4.translate(modelMatrix, xyz);
-    mat4.rotateY(modelMatrix, 90 / 57.2957795);
-    xyz[0] = 0; xyz[1] = 0; xyz[2] = 1;
-    mat4.rotate(modelMatrix, angleInRadians, xyz);     
-    drawTriangle(triangleColorBufferObject3);
-    
-    // Send the commands to WebGL
-	gl.flush();
-	
-	// Request another frame
-	window.requestAnimFrame(render, canvas);
+	gl.enableVertexAttribArray(normalHandle);
+	gl.bindBuffer(gl.ARRAY_BUFFER,cubeNormalBufferObject);
+	gl.vertexAttribPointer(normalHandle,normalDataSize,gl.FLOAT,false,0,0);
+
+	//Multiplies the view matrix by the model matrix and store the result in the
+	//MVP matrix (which contains model*view)
+	mat4.multiply(viewMatrix,modelMatrix,mvpMatrix);
+
+	//Pass the modelview matrix as uniform
+	gl.uniformMatrix4fv(mvMatrixHandle,false,mvpMatrix);
+
+	//Multiplies the modelview matrix by the projection matrix
+	//The matrix then contains model * view * projection
+	mat4.multiply(projectionMatrix,mvpMatrix,mvpMatrix);
+
+	//Pass the Model view projection matrix as uniform
+	gl.uniformMatrix4fv(mvpMatrixHandle,false,mvpMatrix);
+
+	//Pass the light position in eye space as uniform
+	gl.uniform3f(lightPosHandle,lightPosInEyeSpace[0],lightPosInEyeSpace[1],lightPosInEyeSpace[2]);
+
+	//Finally draw the cube
+	gl.drawArrays(gl.TRIANGLES,0,36);
+
 }
 
-function checkError()
-{
-	var error = gl.getError();
+function drawLight () {
 	
-	if (error)
-	{
-		error="error: " + error;
-		pushToErrorBox(error);
-		throw(error);
+	var pointMVPMatrixHandle = gl.getUniformLocation(pointProgramHandle,"u_MVPMatrix");
+	var pointPositionHandle=gl.getAttribLocation(pointProgramHandle,"a_Position");
 
+	//Pass the position
+	gl.vertexAttrib3f(pointPositionHandle,lightPosInModelSpace[0],lightPosInModelSpace[1],lightPosInModelSpace[2]);
+
+	//since we are not using a buffer object, disable vertex arrays for this attribute
+	gl.disableVertexAttribArray(pointPositionHandle);
+	mat4.multiply(viewMatrix,lightModelMatrix,mvpMatrix);
+	mat4.multiply(projectionMatrix,mvpMatrix,mvpMatrix);
+	gl.uniformMatrix4fv(pointMVPMatrixHandle,false,mvpMatrix);
+
+	//draw the point
+	gl.drawArrays(gl.POINTS,0,1);	
+}
+
+function startGL(){
+
+
+    canvas = document.getElementById("canvas");    
+	canvas.width=550;
+    canvas.height=400;
+
+	gl=WebGLUtils.setupWebGL(canvas,{alpha:false});
+
+	if (gl!=null) {
+		cubePositions = new Float32Array
+		([
+				// Front face
+				-1.0, 1.0, 1.0,				
+				-1.0, -1.0, 1.0,
+				1.0, 1.0, 1.0, 
+				-1.0, -1.0, 1.0, 				
+				1.0, -1.0, 1.0,
+				1.0, 1.0, 1.0,
+				
+				// Right face
+				1.0, 1.0, 1.0,				
+				1.0, -1.0, 1.0,
+				1.0, 1.0, -1.0,
+				1.0, -1.0, 1.0,				
+				1.0, -1.0, -1.0,
+				1.0, 1.0, -1.0,
+				
+				// Back face
+				1.0, 1.0, -1.0,				
+				1.0, -1.0, -1.0,
+				-1.0, 1.0, -1.0,
+				1.0, -1.0, -1.0,				
+				-1.0, -1.0, -1.0,
+				-1.0, 1.0, -1.0,
+				
+				// Left face
+				-1.0, 1.0, -1.0,				
+				-1.0, -1.0, -1.0,
+				-1.0, 1.0, 1.0, 
+				-1.0, -1.0, -1.0,				
+				-1.0, -1.0, 1.0, 
+				-1.0, 1.0, 1.0, 
+				
+				// Top face
+				-1.0, 1.0, -1.0,				
+				-1.0, 1.0, 1.0, 
+				1.0, 1.0, -1.0, 
+				-1.0, 1.0, 1.0, 				
+				1.0, 1.0, 1.0, 
+				1.0, 1.0, -1.0,
+				
+				// Bottom face
+				1.0, -1.0, -1.0,				
+				1.0, -1.0, 1.0, 
+				-1.0, -1.0, -1.0,
+				1.0, -1.0, 1.0, 				
+				-1.0, -1.0, 1.0,
+				-1.0, -1.0, -1.0
+		]);	
+		
+		// R, G, B, A
+		cubeColors = new Float32Array
+		([				
+				// Front face (red)
+				1.0, 0.0, 0.0, 1.0,				
+				1.0, 0.0, 0.0, 1.0,
+				1.0, 0.0, 0.0, 1.0,
+				1.0, 0.0, 0.0, 1.0,				
+				1.0, 0.0, 0.0, 1.0,
+				1.0, 0.0, 0.0, 1.0,
+				
+				// Right face (green)
+				0.0, 1.0, 0.0, 1.0,				
+				0.0, 1.0, 0.0, 1.0,
+				0.0, 1.0, 0.0, 1.0,
+				0.0, 1.0, 0.0, 1.0,				
+				0.0, 1.0, 0.0, 1.0,
+				0.0, 1.0, 0.0, 1.0,
+				
+				// Back face (blue)
+				0.0, 0.0, 1.0, 1.0,				
+				0.0, 0.0, 1.0, 1.0,
+				0.0, 0.0, 1.0, 1.0,
+				0.0, 0.0, 1.0, 1.0,				
+				0.0, 0.0, 1.0, 1.0,
+				0.0, 0.0, 1.0, 1.0,
+				
+				// Left face (yellow)
+				1.0, 1.0, 0.0, 1.0,				
+				1.0, 1.0, 0.0, 1.0,
+				1.0, 1.0, 0.0, 1.0,
+				1.0, 1.0, 0.0, 1.0,				
+				1.0, 1.0, 0.0, 1.0,
+				1.0, 1.0, 0.0, 1.0,
+				
+				// Top face (cyan)
+				0.0, 1.0, 1.0, 1.0,				
+				0.0, 1.0, 1.0, 1.0,
+				0.0, 1.0, 1.0, 1.0,
+				0.0, 1.0, 1.0, 1.0,				
+				0.0, 1.0, 1.0, 1.0,
+				0.0, 1.0, 1.0, 1.0,
+				
+				// Bottom face (magenta)
+				1.0, 0.0, 1.0, 1.0,				
+				1.0, 0.0, 1.0, 1.0,
+				1.0, 0.0, 1.0, 1.0,
+				1.0, 0.0, 1.0, 1.0,				
+				1.0, 0.0, 1.0, 1.0,
+				1.0, 0.0, 1.0, 1.0
+		]);
+		
+		// X, Y, Z
+		// The normal is used in light calculations and is a vector which points
+		// orthogonal to the plane of the surface. For a cube model, the normals
+		// should be orthogonal to the points of each face.
+		cubeNormals = new Float32Array
+		([												
+				// Front face
+				0.0, 0.0, 1.0,				
+				0.0, 0.0, 1.0,
+				0.0, 0.0, 1.0,
+				0.0, 0.0, 1.0,				
+				0.0, 0.0, 1.0,
+				0.0, 0.0, 1.0,
+				
+				// Right face 
+				1.0, 0.0, 0.0,				
+				1.0, 0.0, 0.0,
+				1.0, 0.0, 0.0,
+				1.0, 0.0, 0.0,				
+				1.0, 0.0, 0.0,
+				1.0, 0.0, 0.0,
+				
+				// Back face 
+				0.0, 0.0, -1.0,				
+				0.0, 0.0, -1.0,
+				0.0, 0.0, -1.0,
+				0.0, 0.0, -1.0,				
+				0.0, 0.0, -1.0,
+				0.0, 0.0, -1.0,
+				
+				// Left face 
+				-1.0, 0.0, 0.0,				
+				-1.0, 0.0, 0.0,
+				-1.0, 0.0, 0.0,
+				-1.0, 0.0, 0.0,				
+				-1.0, 0.0, 0.0,
+				-1.0, 0.0, 0.0,
+				
+				// Top face 
+				0.0, 1.0, 0.0,			
+				0.0, 1.0, 0.0,
+				0.0, 1.0, 0.0,
+				0.0, 1.0, 0.0,				
+				0.0, 1.0, 0.0,
+				0.0, 1.0, 0.0,
+				
+				// Bottom face 
+				0.0, -1.0, 0.0,			
+				0.0, -1.0, 0.0,
+				0.0, -1.0, 0.0,
+				0.0, -1.0, 0.0,				
+				0.0, -1.0, 0.0,
+				0.0, -1.0, 0.0
+		]);    	    	
+		startRendering();
 	}
+
 }
 
-// Draws a triangle from the given vertex data.
-function drawTriangle(triangleColorBufferObject)
-{		
-	
-
-	// Pass in the position information
-	gl.enableVertexAttribArray(positionHandle);   
-	gl.bindBuffer(gl.ARRAY_BUFFER, trianglePositionBufferObject);
-    gl.vertexAttribPointer(positionHandle, positionDataSize, gl.FLOAT, false,
-    		0, 0);        
-                
-    // Pass in the color information
-    gl.enableVertexAttribArray(colorHandle);   
-    gl.bindBuffer(gl.ARRAY_BUFFER, triangleColorBufferObject);
-    gl.vertexAttribPointer(colorHandle, colorDataSize, gl.FLOAT, false,
-    		0, 0);              
- 	
-
-
-
-	// This multiplies the view matrix by the model matrix, and stores the result in the modelview matrix
-    // (which currently contains model * view).    
-    mat4.multiply(viewMatrix, modelMatrix, mvpMatrix);
-    
-    // This multiplies the modelview matrix by the projection matrix, and stores the result in the MVP matrix
-    // (which now contains model * view * projection).
-    mat4.multiply(projectionMatrix, mvpMatrix, mvpMatrix);
-    
-    gl.uniformMatrix4fv(mvpMatrixHandle, false, mvpMatrix);
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
-}
 
 function reload () {
-	log("Reloading!");
-
-	//Clean error box
-	cleanErrorBox();
-	//Copy contents of the editor to the text Area
-	veditor.save();
-	feditor.save();
-	//Restart rendering process
 	startRendering();
 }
-
-
-// Main entry point
-function startGL(canvas,veditor,feditor,newErrorFunction,clearErrorFunction)
-{		
-
-
-    document.addEventListener('keyup', shortcuts, false);//pass keyup events to function
-
-
-
-
-    
-    // We don't need a depth buffer. 
-    // See https://www.khronos.org/registry/webgl/specs/1.0/ Section 5.2 for more info on parameters and defaults.
-    gl = WebGLUtils.setupWebGL(canvas, { depth: true });
-            
-    if (gl != null)
-	{    	
-    	// Init model data.
-    	
-    	// Define points for equilateral triangles.		
-		trianglePositions = new Float32Array([
-				// X, Y, Z, 
-	            -0.5, -0.25, 0.0, 	            	            
-	            0.5, -0.25, 0.0,	            	            
-	            0.0, 0.559016994, 0.0]);
-		
-		// This triangle is red, green, and blue.
-		triangle1Colors = new Float32Array([
-  				// R, G, B, A  	            
-  	            1.0, 0.0, 0.0, 1.0,  	              	            
-  	            0.0, 0.0, 1.0, 1.0,  	              	            
-  	            0.0, 1.0, 0.0, 1.0]);				
-		
-		// This triangle is yellow, cyan, and magenta.
-		triangle2Colors = new Float32Array([ 
-				// R, G, B, A	            
-	            1.0, 1.0, 0.0, 1.0,	            	            
-	            0.0, 1.0, 1.0, 1.0,	            	            
-	            1.0, 0.0, 1.0, 1.0]);
-		
-		// This triangle is white, gray, and black.
-		triangle3Colors = new Float32Array([ 
-				// R, G, B, A	            
-	            1.0, 1.0, 1.0, 1.0,	            	            
-	            0.5, 0.5, 0.5, 1.0,	            	            
-	            0.0, 0.0, 0.0, 1.0]);		
-		
-    	startRendering();
-	}
-}
-function log(message){
-	if(console){
-		console.log(message);
-	}
-}
-function shortcuts(e) {
-
-    // this would test for whichever key is 40 and the ctrl key at the same time
-    if (e.ctrlKey && event.keyCode == 13) {
-        // call your function to do the thing
-    	log("reload Called");
-        reload();
-    }
-}
-
-
-// Execute the main entry point
