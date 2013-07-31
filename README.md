@@ -1,5 +1,6 @@
 WebGLShaderTest
 ===============
 
-I'm learning OpenGL ES2.0 and i wanted a simple way to test GLSL shaders quickly.This is it.
+Wanted a simple way to test GLSL shaders quickly.
+Webgl canvas with two text boxes with vertex and fragment shader code by the side with the possibility to refresh the canvas.
 Based on the tutorials on http://www.learnopengles.com/
